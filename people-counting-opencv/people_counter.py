@@ -1,4 +1,4 @@
-"""test"""
+""" DENCITY """
 # USAGE
 # To read and write back out to video:
 # python people_counter.py --prototxt mobilenet_ssd/MobileNetSSD_deploy.prototxt \
