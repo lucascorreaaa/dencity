@@ -19,7 +19,7 @@ import numpy as np
 import argparse
 import imutils
 import time
-import cv2
+import cv2 as cv
 import dlib
 
 # function to get the output layer names in the architecture
@@ -30,6 +30,12 @@ import dlib
     output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
     return output_layers """
+# Get the names of the output layers
+def getOutputsNames(net):
+    # Get the names of all the layers in the network
+    layersNames = net.getLayerNames()
+    # Get the names of the output layers, i.e. the layers with unconnected outputs
+    return [layersNames[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -47,16 +53,17 @@ ap.add_argument("-s", "--skip-frames", type=int, default=30,
 	help="# of skip frames between detections")
 args = vars(ap.parse_args())
 
-# initialize the list of class labels MobileNet SSD was trained to
-# detect
-CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
-	"bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
-	"dog", "horse", "motorbike", "person", "pottedplant", "sheep",
-	"sofa", "train", "tvmonitor"]
+# Load names of classes
+classesFile = "yolo/coco.names"
+classes = None
+with open(classesFile, 'rt') as f:
+    classes = f.read().rstrip('\n').split('\n')
 
 # load our serialized model from disk
 print("[INFO] loading model...")
-net = cv2.dnn.readNet(args["weights"], args["model"])
+net = cv.dnn.readNetFromDarknet(args["model"], args["weights"])
+net.setPreferableBackend(cv.dnn.DNN_BACKEND_OPENCV)
+net.setPreferableTarget(cv.dnn.DNN_TARGET_CPU)
 
 # if a video path was not supplied, grab a reference to the webcam
 if not args.get("input", False):
@@ -67,15 +74,15 @@ if not args.get("input", False):
 # otherwise, grab a reference to the video file
 else:
 	print("[INFO] opening video file...")
-	vs = cv2.VideoCapture(args["input"])
+	vs = cv.VideoCapture(args["input"])
 
 # initialize the video writer (we'll instantiate later if need be)
 writer = None
 
 # initialize the frame dimensions (we'll set them as soon as we read
 # the first frame from the video)
-W = None
-H = None
+W = 416
+H = 416
 
 # instantiate our centroid tracker, then initialize a list to store
 # each of our dlib correlation trackers, followed by a dictionary to
@@ -109,7 +116,7 @@ while True:
 	# less data we have, the faster we can process it), then convert
 	# the frame from BGR to RGB for dlib
 	frame = imutils.resize(frame, width=500)
-	rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+	rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
 	# if the frame dimensions are empty, set them
 	if W is None or H is None:
@@ -118,8 +125,8 @@ while True:
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
 	if args["output"] is not None and writer is None:
-		fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-		writer = cv2.VideoWriter(args["output"], fourcc, 30,
+		fourcc = cv.VideoWriter_fourcc(*"MJPG")
+		writer = cv.VideoWriter(args["output"], fourcc, 30,
 			(W, H), True)
 
 	# initialize the current status along with our list of bounding
@@ -137,10 +144,11 @@ while True:
 
 		# convert the frame to a blob and pass the blob through the
 		# network and obtain the detections
-		blob = cv2.dnn.blobFromImage(frame, 0.007843, (W, H), 127.5)
+		blob = cv.dnn.blobFromImage(frame, 1/255, (W, H), [0,0,0], 1, crop=False)
 		net.setInput(blob)
-		detections = net.forward()
-		#detections = net.forward(get_output_layers(net))
+		detections = net.forward(getOutputsNames(net))
+
+		#detections = net.forward()
 
 		# loop over the detections
 		for i in np.arange(0, detections.shape[2]):
@@ -156,7 +164,7 @@ while True:
 				idx = int(detections[0, 0, i, 1])
 
 				# if the class label is not a person, ignore it
-				if CLASSES[idx] != "person":
+				if classes[idx] != "person":
 					continue
 
 				# compute the (x, y)-coordinates of the bounding box
@@ -200,7 +208,7 @@ while True:
 	# draw a horizontal line in the center of the frame -- once an
 	# object crosses this line we will determine whether they were
 	# moving 'up' or 'down'
-	cv2.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
+	cv.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
 
 	# use the centroid tracker to associate the (1) old object
 	# centroids with (2) the newly computed object centroids
@@ -249,9 +257,9 @@ while True:
 		# draw both the ID of the object and the centroid of the
 		# object on the output frame
 		text = "ID {}".format(objectID)
-		cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-		cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+		cv.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
+			cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+		cv.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
 
 	# construct a tuple of information we will be displaying on the
 	# frame
@@ -264,16 +272,16 @@ while True:
 	# loop over the info tuples and draw them on our frame
 	for (i, (k, v)) in enumerate(info):
 		text = "{}: {}".format(k, v)
-		cv2.putText(frame, text, (10, H - ((i * 20) + 20)),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+		cv.putText(frame, text, (10, H - ((i * 20) + 20)),
+			cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
 	# check to see if we should write the frame to disk
 	if writer is not None:
 		writer.write(frame)
 
 	# show the output frame
-	cv2.imshow("Frame", frame)
-	key = cv2.waitKey(1) & 0xFF
+	cv.imshow("Frame", frame)
+	key = cv.waitKey(1) & 0xFF
 
 	# if the `q` key was pressed, break from the loop
 	if key == ord("q"):
@@ -302,4 +310,4 @@ else:
 	vs.release()
 
 # close any open windows
-cv2.destroyAllWindows()
+cv.destroyAllWindows()
