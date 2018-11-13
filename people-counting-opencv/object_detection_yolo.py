@@ -12,8 +12,8 @@ import os.path
 # Initialize the parameters
 confThreshold = 0.5  #Confidence threshold
 nmsThreshold = 0.4   #Non-maximum suppression threshold
-inpWidth = 416       #Width of network's input image
-inpHeight = 416      #Height of network's input image
+W = 416       #Width of network's input image
+H = 416      #Height of network's input image
 
 parser = argparse.ArgumentParser(description='Object Detection using YOLO in OPENCV')
 parser.add_argument('--image', help='Path to image file.')
@@ -27,8 +27,8 @@ with open(classesFile, 'rt') as f:
     classes = f.read().rstrip('\n').split('\n')
 
 # Give the configuration and weight files for the model and load the network using them.
-modelConfiguration = "yolo/yolov3.cfg";
-modelWeights = "yolo/yolov3.weights";
+modelConfiguration = "yolo/yolov3-tiny.cfg";
+modelWeights = "yolo/yolov3-tiny.weights";
 
 net = cv.dnn.readNetFromDarknet(modelConfiguration, modelWeights)
 net.setPreferableBackend(cv.dnn.DNN_BACKEND_OPENCV)
@@ -137,14 +137,13 @@ while cv.waitKey(1) < 0:
         break
 
     # Create a 4D blob from a frame.
-    blob = cv.dnn.blobFromImage(frame, 1/255, (inpWidth, inpHeight), [0,0,0], 1, crop=False)
+    blob = cv.dnn.blobFromImage(frame, 1/255, (W, H), [0,0,0], 1, crop=False)
 
     # Sets the input to the network
     net.setInput(blob)
 
     # Runs the forward pass to get output of the output layers
     outs = net.forward(getOutputsNames(net))
-    print(outs)
     
     # Remove the bounding boxes with low confidence
     postprocess(frame, outs)

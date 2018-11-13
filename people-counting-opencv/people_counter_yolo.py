@@ -22,20 +22,30 @@ import time
 import cv2 as cv
 import dlib
 
-# function to get the output layer names in the architecture
-""" def get_output_layers(net):
-    
-    layer_names = net.getLayerNames()
-    
-    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
-
-    return output_layers """
 # Get the names of the output layers
 def getOutputsNames(net):
     # Get the names of all the layers in the network
     layersNames = net.getLayerNames()
     # Get the names of the output layers, i.e. the layers with unconnected outputs
     return [layersNames[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+
+# Draw the predicted bounding box
+def drawPred(classId, conf, left, top, right, bottom):
+    # Draw a bounding box.
+    cv.rectangle(frame, (left, top), (right, bottom), (255, 178, 50), 3)
+    
+    label = '%.2f' % conf
+        
+    # Get the label for the class name and its confidence
+    if classes:
+        assert(classId < len(classes))
+        label = '%s:%s' % (classes[classId], label)
+
+    #Display the label at the top of the bounding box
+    labelSize, baseLine = cv.getTextSize(label, cv.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+    top = max(top, labelSize[1])
+    cv.rectangle(frame, (left, top - round(1.5*labelSize[1])), (left + round(1.5*labelSize[0]), top + baseLine), (255, 255, 255), cv.FILLED)
+    cv.putText(frame, label, (left, top), cv.FONT_HERSHEY_SIMPLEX, 0.75, (0,0,0), 1)
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -48,9 +58,9 @@ ap.add_argument("-i", "--input", type=str,
 ap.add_argument("-o", "--output", type=str,
 	help="path to optional output video file")
 ap.add_argument("-c", "--confidence", type=float, default=0.4,
-	help="minimum probability to filter weak detections")
+	help="minimum probability to filter weak outs")
 ap.add_argument("-s", "--skip-frames", type=int, default=30,
-	help="# of skip frames between detections")
+	help="# of skip frames between outs")
 args = vars(ap.parse_args())
 
 # Load names of classes
@@ -84,6 +94,10 @@ writer = None
 W = 416
 H = 416
 
+# Initialize the parameters
+confThreshold = args["confidence"]  #Confidence threshold
+nmsThreshold = 0.4   #Non-maximum suppression threshold
+
 # instantiate our centroid tracker, then initialize a list to store
 # each of our dlib correlation trackers, followed by a dictionary to
 # map each unique object ID to a TrackableObject
@@ -115,7 +129,7 @@ while True:
 	# resize the frame to have a maximum width of 500 pixels (the
 	# less data we have, the faster we can process it), then convert
 	# the frame from BGR to RGB for dlib
-	frame = imutils.resize(frame, width=500)
+	#frame = imutils.resize(frame, width=416)
 	rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
 	# if the frame dimensions are empty, set them
@@ -125,9 +139,9 @@ while True:
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
 	if args["output"] is not None and writer is None:
-		fourcc = cv.VideoWriter_fourcc(*"MJPG")
-		writer = cv.VideoWriter(args["output"], fourcc, 30,
-			(W, H), True)
+		fourcc = cv.VideoWriter_fourcc('M','J','P','G')
+		writer = cv.VideoWriter(args["output"], fourcc, 30, (round(vs.get(cv.CAP_PROP_FRAME_WIDTH)), round(vs.get(cv.CAP_PROP_FRAME_HEIGHT))))
+		#writer = cv.VideoWriter(args["output"], fourcc, 30, (W, H), True)
 
 	# initialize the current status along with our list of bounding
 	# box rectangles returned by either (1) our object detector or
@@ -143,45 +157,92 @@ while True:
 		trackers = []
 
 		# convert the frame to a blob and pass the blob through the
-		# network and obtain the detections
+		# network and obtain the outs
 		blob = cv.dnn.blobFromImage(frame, 1/255, (W, H), [0,0,0], 1, crop=False)
 		net.setInput(blob)
-		detections = net.forward(getOutputsNames(net))
+		outs = net.forward(getOutputsNames(net))
+		frameHeight = frame.shape[0]
+		frameWidth = frame.shape[1]
 
-		#detections = net.forward()
+		# Scan through all the bounding boxes output from the network and keep only the
+		# ones with high confidence scores. Assign the box's class label as the class with the highest score.
+		classIds = []
+		confidences = []
+		boxes = []
+		for out in outs:
+			for detection in out:
+				scores = detection[5:]
+				classId = np.argmax(scores)
+				confidence = scores[classId]
 
-		# loop over the detections
-		for i in np.arange(0, detections.shape[2]):
-			# extract the confidence (i.e., probability) associated
-			# with the prediction
-			confidence = detections[0, 0, i, 2]
+				if confidence > confThreshold:
+					# if the class label is not a person, ignore it
+					if classes[classId] != "person":
+						continue
+					center_x = int(detection[0] * frameWidth)
+					center_y = int(detection[1] * frameHeight)
+					width = int(detection[2] * frameWidth)
+					height = int(detection[3] * frameHeight)
+					left = int(center_x - width / 2)
+					top = int(center_y - height / 2)
+					classIds.append(classId)
+					confidences.append(float(confidence))
+					boxes.append([left, top, width, height])
 
-			# filter out weak detections by requiring a minimum
-			# confidence
-			if confidence > args["confidence"]:
-				# extract the index of the class label from the
-				# detections list
-				idx = int(detections[0, 0, i, 1])
+		# Perform non maximum suppression to eliminate redundant overlapping boxes with
+		# lower confidences.
+		indices = cv.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
+		for i in indices:
+			i = i[0]
+			box = boxes[i]
+			left = box[0]
+			top = box[1]
+			width = box[2]
+			height = box[3]
+			drawPred(classIds[i], confidences[i], left, top, left + width, top + height)
 
-				# if the class label is not a person, ignore it
-				if classes[idx] != "person":
-					continue
+			# construct a dlib rectangle object from the bounding
+			# box coordinates and then start the dlib correlation
+			# tracker
+			tracker = dlib.correlation_tracker()
+			rect = dlib.rectangle(left, top, left + width, top + height)
+			tracker.start_track(rgb, rect)
 
-				# compute the (x, y)-coordinates of the bounding box
-				# for the object
-				box = detections[0, 0, i, 3:7] * np.array([W, H, W, H])
-				(startX, startY, endX, endY) = box.astype("int")
+			# add the tracker to our list of trackers so we can
+			# utilize it during skip frames
+			trackers.append(tracker)
+			""" # loop over the outs
+				for i in np.arange(0, outs.shape[2]):
+					# extract the confidence (i.e., probability) associated
+					# with the prediction
+					confidence = outs[0, 0, i, 2]
 
-				# construct a dlib rectangle object from the bounding
-				# box coordinates and then start the dlib correlation
-				# tracker
-				tracker = dlib.correlation_tracker()
-				rect = dlib.rectangle(startX, startY, endX, endY)
-				tracker.start_track(rgb, rect)
+					# filter out weak outs by requiring a minimum
+					# confidence
+					if confidence > args["confidence"]:
+						# extract the index of the class label from the
+						# outs list
+						idx = int(outs[0, 0, i, 1])
 
-				# add the tracker to our list of trackers so we can
-				# utilize it during skip frames
-				trackers.append(tracker)
+						# if the class label is not a person, ignore it
+						if classes[idx] != "person":
+							continue
+
+						# compute the (x, y)-coordinates of the bounding box
+						# for the object
+						box = outs[0, 0, i, 3:7] * np.array([W, H, W, H])
+						(startX, startY, endX, endY) = box.astype("int") 
+
+						# construct a dlib rectangle object from the bounding
+						# box coordinates and then start the dlib correlation
+						# tracker
+						tracker = dlib.correlation_tracker()
+						rect = dlib.rectangle(startX, startY, endX, endY)
+						tracker.start_track(rgb, rect) 
+
+						# add the tracker to our list of trackers so we can
+						# utilize it during skip frames
+						trackers.append(tracker)"""
 
 	# otherwise, we should utilize our object *trackers* rather than
 	# object *detectors* to obtain a higher frame processing throughput
@@ -277,7 +338,7 @@ while True:
 
 	# check to see if we should write the frame to disk
 	if writer is not None:
-		writer.write(frame)
+		writer.write(frame.astype(np.uint8))
 
 	# show the output frame
 	cv.imshow("Frame", frame)
