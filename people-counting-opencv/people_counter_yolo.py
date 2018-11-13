@@ -22,6 +22,13 @@ import time
 import cv2 as cv
 import dlib
 
+alreadyPrinted = []
+# Print only one 
+def printo(text):
+	if not text in alreadyPrinted:
+		alreadyPrinted.append(text)
+		print(text)
+
 # Get the names of the output layers
 def getOutputsNames(net):
     # Get the names of all the layers in the network
@@ -57,9 +64,9 @@ ap.add_argument("-i", "--input", type=str,
 	help="path to optional input video file")
 ap.add_argument("-o", "--output", type=str,
 	help="path to optional output video file")
-ap.add_argument("-c", "--confidence", type=float, default=0.4,
+ap.add_argument("-c", "--confidence", type=float, default=0.5,
 	help="minimum probability to filter weak outs")
-ap.add_argument("-s", "--skip-frames", type=int, default=30,
+ap.add_argument("-s", "--skip-frames", type=int, default=20,
 	help="# of skip frames between outs")
 args = vars(ap.parse_args())
 
@@ -91,8 +98,8 @@ writer = None
 
 # initialize the frame dimensions (we'll set them as soon as we read
 # the first frame from the video)
-W = 416
-H = 416
+W = None#416
+H = None#416
 
 # Initialize the parameters
 confThreshold = args["confidence"]  #Confidence threshold
@@ -126,15 +133,17 @@ while True:
 	if args["input"] is not None and frame is None:
 		break
 
-	# resize the frame to have a maximum width of 500 pixels (the
-	# less data we have, the faster we can process it), then convert
-	# the frame from BGR to RGB for dlib
-	#frame = imutils.resize(frame, width=416)
+	# resize the frame to have a maximum width of 500 pixels (the less data we have, the faster we can process it), then 
+	# convert the frame from BGR to RGB for dlib
+	#frame = imutils.resize(frame, width=416, height=416)								-->> SE DESCOMENTAR, NÃO GERA O VIDEO DE OUTPUT
 	rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
 	# if the frame dimensions are empty, set them
 	if W is None or H is None:
-		(H, W) = frame.shape[:2]
+		#(H, W) = frame.shape[:2]
+		W = 640 #640 #frame.shape[1] // 2
+		H = 350 #370 #frame.shape[0] // 2
+		print("D = W: {} - H: {}".format(W, H))
 
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
@@ -211,6 +220,7 @@ while True:
 			# add the tracker to our list of trackers so we can
 			# utilize it during skip frames
 			trackers.append(tracker)
+			print("DETECTION! - Frame: {} ".format(totalFrames))
 			""" # loop over the outs
 				for i in np.arange(0, outs.shape[2]):
 					# extract the confidence (i.e., probability) associated
@@ -269,6 +279,7 @@ while True:
 	# draw a horizontal line in the center of the frame -- once an
 	# object crosses this line we will determine whether they were
 	# moving 'up' or 'down'
+	printo("W: {} - H: {}".format(W, H))
 	cv.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
 
 	# use the centroid tracker to associate the (1) old object
@@ -302,6 +313,7 @@ while True:
 				# is moving up) AND the centroid is above the center
 				# line, count the object
 				if direction < 0 and centroid[1] < H // 2:
+					print("CENTROID UP! - Frame: {} ".format(totalFrames))
 					totalUp += 1
 					to.counted = True
 
@@ -309,6 +321,7 @@ while True:
 				# is moving down) AND the centroid is below the
 				# center line, count the object
 				elif direction > 0 and centroid[1] > H // 2:
+					print("CENTROID DOWN! - Frame: {} ".format(totalFrames))
 					totalDown += 1
 					to.counted = True
 
@@ -319,7 +332,7 @@ while True:
 		# object on the output frame
 		text = "ID {}".format(objectID)
 		cv.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
-			cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+		cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 		cv.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
 
 	# construct a tuple of information we will be displaying on the
@@ -328,17 +341,19 @@ while True:
 		("Up", totalUp),
 		("Down", totalDown),
 		("Status", status),
+		("Frame", totalFrames),
 	]
 
 	# loop over the info tuples and draw them on our frame
 	for (i, (k, v)) in enumerate(info):
 		text = "{}: {}".format(k, v)
 		cv.putText(frame, text, (10, H - ((i * 20) + 20)),
-			cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+		cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
 	# check to see if we should write the frame to disk
 	if writer is not None:
-		writer.write(frame.astype(np.uint8))
+		#writer.write(frame.astype(np.uint8))
+		writer.write(frame)
 
 	# show the output frame
 	cv.imshow("Frame", frame)
