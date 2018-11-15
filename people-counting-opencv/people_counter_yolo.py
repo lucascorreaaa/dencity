@@ -170,8 +170,8 @@ while True:
 		blob = cv.dnn.blobFromImage(frame, 1/255, (W, H), [0,0,0], 1, crop=False)
 		net.setInput(blob)
 		outs = net.forward(getOutputsNames(net))
-		frameHeight = frame.shape[0]
-		frameWidth = frame.shape[1]
+		#frameHeight = frame.shape[0]
+		#frameWidth = frame.shape[1]
 
 		# Scan through all the bounding boxes output from the network and keep only the
 		# ones with high confidence scores. Assign the box's class label as the class with the highest score.
@@ -188,20 +188,25 @@ while True:
 					# if the class label is not a person, ignore it
 					if classes[classId] != "person":
 						continue
-					center_x = int(detection[0] * frameWidth)
-					center_y = int(detection[1] * frameHeight)
-					width = int(detection[2] * frameWidth)
-					height = int(detection[3] * frameHeight)
+					center_x = int(detection[0] * W) # centroid x-axis value
+					center_y = int(detection[1] * H) # centroid y-axis value
+					width = int(detection[2] * W)
+					height = int(detection[3] * H)
 					left = int(center_x - width / 2)
 					top = int(center_y - height / 2)
 					classIds.append(classId)
 					confidences.append(float(confidence))
+					cv.putText(frame, "left-top", (left - 10, top - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+					cv.circle(frame, (left, top), 4, (0, 0, 255), -1)
+					print("Appended - Left-top: ({},{}) - Frame: {}".format(left, top, totalFrames))
 					boxes.append([left, top, width, height])
 
 		# Perform non maximum suppression to eliminate redundant overlapping boxes with
 		# lower confidences.
 		indices = cv.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
+		print("Boxes Length: {} - Frame: {}".format(len(boxes), totalFrames))
 		for i in indices:
+			print("I = {}".format(i))
 			i = i[0]
 			box = boxes[i]
 			left = box[0]
@@ -209,6 +214,14 @@ while True:
 			width = box[2]
 			height = box[3]
 			drawPred(classIds[i], confidences[i], left, top, left + width, top + height)
+
+			# DEBUG - cv.putText(frame, "left-top", (left - 10, top - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+			# DEBUG - cv.circle(frame, (left, top), 4, (0, 0, 255), -1)
+			# DEBUG - cv.putText(frame, "left+width & top+height", ((left + width) - 10, (top + height) - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+			# DEBUG - cv.circle(frame, ((left + width), (top + height)), 4, (0, 0, 255), -1)
+
+			# add the bounding box coordinates to the rectangles list
+			rects.append((left, top, left + width, top + height))
 
 			# construct a dlib rectangle object from the bounding
 			# box coordinates and then start the dlib correlation
@@ -220,39 +233,8 @@ while True:
 			# add the tracker to our list of trackers so we can
 			# utilize it during skip frames
 			trackers.append(tracker)
+			print(" - Trackers length: {}".format(len(trackers)))
 			print("DETECTION! - Frame: {} ".format(totalFrames))
-			""" # loop over the outs
-				for i in np.arange(0, outs.shape[2]):
-					# extract the confidence (i.e., probability) associated
-					# with the prediction
-					confidence = outs[0, 0, i, 2]
-
-					# filter out weak outs by requiring a minimum
-					# confidence
-					if confidence > args["confidence"]:
-						# extract the index of the class label from the
-						# outs list
-						idx = int(outs[0, 0, i, 1])
-
-						# if the class label is not a person, ignore it
-						if classes[idx] != "person":
-							continue
-
-						# compute the (x, y)-coordinates of the bounding box
-						# for the object
-						box = outs[0, 0, i, 3:7] * np.array([W, H, W, H])
-						(startX, startY, endX, endY) = box.astype("int") 
-
-						# construct a dlib rectangle object from the bounding
-						# box coordinates and then start the dlib correlation
-						# tracker
-						tracker = dlib.correlation_tracker()
-						rect = dlib.rectangle(startX, startY, endX, endY)
-						tracker.start_track(rgb, rect) 
-
-						# add the tracker to our list of trackers so we can
-						# utilize it during skip frames
-						trackers.append(tracker)"""
 
 	# otherwise, we should utilize our object *trackers* rather than
 	# object *detectors* to obtain a higher frame processing throughput
@@ -272,14 +254,24 @@ while True:
 			startY = int(pos.top())
 			endX = int(pos.right())
 			endY = int(pos.bottom())
+			# DEBUG - cv.putText(frame, "left-top", (startX - 10, startY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+			# DEBUG - cv.circle(frame, (startX, startY), 4, (0, 0, 255), -1)
+			# DEBUG - cv.putText(frame, "bottom-right", (endX - 10, endY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+			# DEBUG - cv.circle(frame, (endX, endY), 4, (0, 0, 255), -1)
+			# DEBUG - cX = int((startX + endX) / 2.0)
+			# DEBUG - cY = int((startY + endY) / 2.0)
+			# DEBUG - cv.putText(frame, "center", (cX - 10, cY - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+			# DEBUG - cv.circle(frame, (cX, cY), 4, (0, 0, 255), -1)
 
 			# add the bounding box coordinates to the rectangles list
 			rects.append((startX, startY, endX, endY))
+			#print("trackers: {} \n rects length: {} - FRAME: {}".format(len(trackers), len(rects), totalFrames))
 
 	# draw a horizontal line in the center of the frame -- once an
 	# object crosses this line we will determine whether they were
 	# moving 'up' or 'down'
 	printo("W: {} - H: {}".format(W, H))
+	#print(" - Rects length: {}".format(len(rects)))
 	cv.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
 
 	# use the centroid tracker to associate the (1) old object
