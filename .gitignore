@@ -1,6 +1,6 @@
 # Ignore 'weights' files (too heavy D:)
 *.weights
 # Ignore all output videos
-output/*
+people-counting-opencv/output/*
 # Keep this file inside, to allow push of an empty folder
-!output/.gitkeep
+!people-counting-opencv/output/.gitkeep
