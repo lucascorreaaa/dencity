@@ -83,8 +83,6 @@ class CentroidTracker:
 			# centroids and input centroids, respectively -- our
 			# goal will be to match an input centroid to an existing
 			# object centroid
-			print("# CENTROID TRACKER # - Object Centroids: {}".format(np.array(objectCentroids)))
-			print("# CENTROID TRACKER # - Input Centroids: {}".format(inputCentroids))
 			D = dist.cdist(np.array(objectCentroids), inputCentroids)
 
 			# in order to perform this matching we must (1) find the
@@ -117,7 +115,6 @@ class CentroidTracker:
 				# the maximum distance, do not associate the two
 				# centroids to the same object
 				if D[row, col] > self.maxDistance:
-					print("# CENTROID TRACKER # - DISTANCIA É MAIOR!")
 					continue
 
 				# otherwise, grab the object ID for the current row,
@@ -142,7 +139,6 @@ class CentroidTracker:
 			# we need to check and see if some of these objects have
 			# potentially disappeared
 			if D.shape[0] >= D.shape[1]:
-				print("# CENTROID TRACKER # - objectCentroids >= inputCentroids")
 				# loop over the unused row indexes
 				for row in unusedRows:
 					# grab the object ID for the corresponding row
@@ -161,7 +157,6 @@ class CentroidTracker:
 			# register each new input centroid as a trackable object
 			else:
 				for col in unusedCols:
-					print("# Centroid Tracker # - Registrou um novo centroid!")
 					self.register(inputCentroids[col])
 
 		# return the set of trackable objects

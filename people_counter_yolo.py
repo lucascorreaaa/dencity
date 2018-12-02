@@ -1,14 +1,10 @@
 """ DENCITY """
 # USAGE
 # To read and write back out to video:
-# python people_counter.py --prototxt mobilenet_ssd/MobileNetSSD_deploy.prototxt \
-#	--model mobilenet_ssd/MobileNetSSD_deploy.caffemodel --input videos/example_01.mp4 \
-#	--output output/output_01.avi
+# python people_counter_yolo.py -w yolo/yolov3.weights -m yolo/wolov3.cfg \ 
+# -i videos/<video-name>.<video-extension> -o output/<video-name>.<video-extension>
 #
-# To read from webcam and write back out to disk:
-# python people_counter.py --prototxt mobilenet_ssd/MobileNetSSD_deploy.prototxt \
-#	--model mobilenet_ssd/MobileNetSSD_deploy.caffemodel \
-#	--output output/webcam_output.avi
+# To read from webcam and write back out to disk you just need to specify no input argument.
 
 # import the necessary packages
 from pyimagesearch.centroidtracker import CentroidTracker
@@ -21,13 +17,6 @@ import imutils
 import time
 import cv2 as cv
 import dlib
-
-alreadyPrinted = []
-# Print only one 
-def printo(text):
-	if not text in alreadyPrinted:
-		alreadyPrinted.append(text)
-		print(text)
 
 # Get the names of the output layers
 def getOutputsNames(net):
@@ -98,8 +87,8 @@ writer = None
 
 # initialize the frame dimensions (we'll set them as soon as we read
 # the first frame from the video)
-W = None#416
-H = None#416
+W = None
+H = None
 
 # Initialize the parameters
 confThreshold = args["confidence"]  #Confidence threshold
@@ -140,17 +129,14 @@ while True:
 
 	# if the frame dimensions are empty, set them
 	if W is None or H is None:
-		#(H, W) = frame.shape[:2]
-		W = 640 #640 #frame.shape[1] // 2
-		H = 350 #370 #frame.shape[0] // 2
-		print("D = W: {} - H: {}".format(W, H))
+		W = 640 #frame.shape[1] // 2
+		H = 350 #frame.shape[0] // 2
 
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
 	if args["output"] is not None and writer is None:
 		fourcc = cv.VideoWriter_fourcc('M','J','P','G')
 		writer = cv.VideoWriter(args["output"], fourcc, 30, (round(vs.get(cv.CAP_PROP_FRAME_WIDTH)), round(vs.get(cv.CAP_PROP_FRAME_HEIGHT))))
-		#writer = cv.VideoWriter(args["output"], fourcc, 30, (W, H), True)
 
 	# initialize the current status along with our list of bounding
 	# box rectangles returned by either (1) our object detector or
@@ -198,15 +184,12 @@ while True:
 					confidences.append(float(confidence))
 					cv.putText(frame, "left-top", (left - 10, top - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 					cv.circle(frame, (left, top), 4, (0, 0, 255), -1)
-					print("Appended - Left-top: ({},{}) - Frame: {}".format(left, top, totalFrames))
 					boxes.append([left, top, width, height])
 
 		# Perform non maximum suppression to eliminate redundant overlapping boxes with
 		# lower confidences.
 		indices = cv.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
-		print("Boxes Length: {} - Frame: {}".format(len(boxes), totalFrames))
 		for i in indices:
-			print("I = {}".format(i))
 			i = i[0]
 			box = boxes[i]
 			left = box[0]
@@ -233,8 +216,6 @@ while True:
 			# add the tracker to our list of trackers so we can
 			# utilize it during skip frames
 			trackers.append(tracker)
-			print(" - Trackers length: {}".format(len(trackers)))
-			print("DETECTION! - Frame: {} ".format(totalFrames))
 
 	# otherwise, we should utilize our object *trackers* rather than
 	# object *detectors* to obtain a higher frame processing throughput
@@ -265,13 +246,10 @@ while True:
 
 			# add the bounding box coordinates to the rectangles list
 			rects.append((startX, startY, endX, endY))
-			#print("trackers: {} \n rects length: {} - FRAME: {}".format(len(trackers), len(rects), totalFrames))
 
 	# draw a horizontal line in the center of the frame -- once an
 	# object crosses this line we will determine whether they were
 	# moving 'up' or 'down'
-	printo("W: {} - H: {}".format(W, H))
-	#print(" - Rects length: {}".format(len(rects)))
 	cv.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
 
 	# use the centroid tracker to associate the (1) old object
@@ -305,7 +283,7 @@ while True:
 				# is moving up) AND the centroid is above the center
 				# line, count the object
 				if direction < 0 and centroid[1] < H // 2:
-					print("CENTROID UP! - Frame: {} ".format(totalFrames))
+					# print("CENTROID UP! - Frame: {} ".format(totalFrames))
 					totalUp += 1
 					to.counted = True
 
@@ -313,7 +291,7 @@ while True:
 				# is moving down) AND the centroid is below the
 				# center line, count the object
 				elif direction > 0 and centroid[1] > H // 2:
-					print("CENTROID DOWN! - Frame: {} ".format(totalFrames))
+					# print("CENTROID DOWN! - Frame: {} ".format(totalFrames))
 					totalDown += 1
 					to.counted = True
 
