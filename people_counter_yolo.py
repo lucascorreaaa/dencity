@@ -17,6 +17,7 @@ import imutils
 import time
 import cv2 as cv
 import dlib
+import urllib.request
 
 # Get the names of the output layers
 def getOutputsNames(net):
@@ -57,6 +58,10 @@ ap.add_argument("-c", "--confidence", type=float, default=0.5,
 	help="minimum probability to filter weak outs")
 ap.add_argument("-s", "--skip-frames", type=int, default=20,
 	help="# of skip frames between outs")
+ap.add_argument("-u", "--url", type=str, default="http://192.168.15.12:8080/shot.jpg",
+	help="URL to image, given by IP Webcam app, using the cell phone. Please, refer to https://www.youtube.com/watch?v=2xcUzXataIk to a guide on how to do it.")
+ap.add_argument("-b", "--webcam", 
+	help="Use this argument to set your webcam as a video source for the algorithm.")
 args = vars(ap.parse_args())
 
 # Load names of classes
@@ -73,10 +78,25 @@ net.setPreferableTarget(cv.dnn.DNN_TARGET_CPU)
 
 # if a video path was not supplied, grab a reference to the webcam
 if not args.get("input", False):
-	print("[INFO] starting video stream...")
-	vs = VideoStream(src=0).start()
-	time.sleep(2.0)
 
+	# if the input is from a cellphone camera (through IP Webcam app)
+	if not args.get("webcam", False):
+		print("[INFO] connecting to IP Webcam URL...")
+		#vs = urllib.request.urlopen(args["url"])
+		""" while True:
+			imgResp = urllib.request.urlopen(args["url"])
+			imgNp = np.array(bytearray(imgResp.read()), dtype=np.uint8)
+			imgDecoded = cv.imdecode(imgNp, -1)
+			img = cv.resize(imgDecoded, (640, 350))
+			cv.imshow("Phone camera (resized)", img)
+
+			key = cv.waitKey(1)
+			if key is not -1 : quit() """
+	else: 
+		print("[INFO] starting video stream...")
+		vs = VideoStream(src=0).start()
+		time.sleep(2.0)
+	
 # otherwise, grab a reference to the video file
 else:
 	print("[INFO] opening video file...")
@@ -114,8 +134,13 @@ fps = FPS().start()
 while True:
 	# grab the next frame and handle if we are reading from either
 	# VideoCapture or VideoStream
-	frame = vs.read()
-	frame = frame[1] if args.get("input", False) else frame
+	if args.get("webcam", False) or args.get("input", False):
+		frame = vs.read()
+		frame = frame[1] if args.get("input", False) else frame
+	else:
+		vs = urllib.request.urlopen(args["url"])
+		imgNp = np.array(bytearray(vs.read()), dtype=np.uint8)
+		frame = cv.imdecode(imgNp, -1)
 
 	# if we are viewing a video and we did not grab a frame then we
 	# have reached the end of the video
@@ -125,18 +150,20 @@ while True:
 	# resize the frame to have a maximum width of 500 pixels (the less data we have, the faster we can process it), then 
 	# convert the frame from BGR to RGB for dlib
 	#frame = imutils.resize(frame, width=416, height=416)								-->> SE DESCOMENTAR, NÃO GERA O VIDEO DE OUTPUT
+	#frame = cv.resize(frame, (640, 350))
 	rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
 	# if the frame dimensions are empty, set them
 	if W is None or H is None:
-		W = 640 #frame.shape[1] // 2
-		H = 350 #frame.shape[0] // 2
+		W = frame.shape[1] #640 #frame.shape[1] // 2
+		H = frame.shape[0] #350 #frame.shape[0] // 2
 
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
 	if args["output"] is not None and writer is None:
 		fourcc = cv.VideoWriter_fourcc('M','J','P','G')
-		writer = cv.VideoWriter(args["output"], fourcc, 30, (round(vs.get(cv.CAP_PROP_FRAME_WIDTH)), round(vs.get(cv.CAP_PROP_FRAME_HEIGHT))))
+		#writer = cv.VideoWriter(args["output"], fourcc, 30, (round(vs.get(cv.CAP_PROP_FRAME_WIDTH)), round(vs.get(cv.CAP_PROP_FRAME_HEIGHT))))
+		writer = cv.VideoWriter(args["output"], fourcc, 30, (round(frame.shape[1]), round(frame.shape[0])))
 
 	# initialize the current status along with our list of bounding
 	# box rectangles returned by either (1) our object detector or
@@ -347,12 +374,12 @@ print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
 if writer is not None:
 	writer.release()
 
-# if we are not using a video file, stop the camera video stream
-if not args.get("input", False):
+# if we are using webcam, stop the camera video stream
+if args.get("webcam", False):
 	vs.stop()
 
 # otherwise, release the video file pointer
-else:
+if args.get("input", False):
 	vs.release()
 
 # close any open windows
