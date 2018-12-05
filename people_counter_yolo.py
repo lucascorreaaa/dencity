@@ -335,8 +335,8 @@ while True:
 	# construct a tuple of information we will be displaying on the
 	# frame
 	info = [
-		("Up", totalUp),
-		("Down", totalDown),
+		("Saída", totalUp),
+		("Entrada", totalDown),
 		("Status", status),
 		("Frame", totalFrames),
 	]
