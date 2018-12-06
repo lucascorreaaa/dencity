@@ -11,6 +11,7 @@ from pyimagesearch.centroidtracker import CentroidTracker
 from pyimagesearch.trackableobject import TrackableObject
 from imutils.video import VideoStream
 from imutils.video import FPS
+from datetime import datetime
 import numpy as np
 import argparse
 import imutils
@@ -18,6 +19,7 @@ import time
 import cv2 as cv
 import dlib
 import urllib.request
+import requests
 
 # Get the names of the output layers
 def getOutputsNames(net):
@@ -126,6 +128,7 @@ trackableObjects = {}
 totalFrames = 0
 totalDown = 0
 totalUp = 0
+total = 0
 
 # start the frames per second throughput estimator
 fps = FPS().start()
@@ -155,8 +158,8 @@ while True:
 
 	# if the frame dimensions are empty, set them
 	if W is None or H is None:
-		W = frame.shape[1] #640 #frame.shape[1] // 2
-		H = frame.shape[0] #350 #frame.shape[0] // 2
+		W = 640 #frame.shape[1] #640 #frame.shape[1] // 2
+		H = 350 #frame.shape[0] #350 #frame.shape[0] // 2
 
 	# if we are supposed to be writing a video to disk, initialize
 	# the writer
@@ -312,15 +315,32 @@ while True:
 				if direction < 0 and centroid[1] < H // 2:
 					# print("CENTROID UP! - Frame: {} ".format(totalFrames))
 					totalUp += 1
+					total -= 1
 					to.counted = True
-
+					""" try:
+						r = requests.post('http://ec2-18-208-229-68.compute-1.amazonaws.com:3000/buses', data = { 'prefix':'82247','line': '7282-10',
+						'load': total,'arrival_time': datetime.now(),'py': 1,'px': 1 })
+						print(r.status_code, r.reason)
+					except Exception as a:
+						print("Exception: {}".format(a))
+						print("Deu ruim endpoint") """
 				# if the direction is positive (indicating the object
 				# is moving down) AND the centroid is below the
 				# center line, count the object
 				elif direction > 0 and centroid[1] > H // 2:
 					# print("CENTROID DOWN! - Frame: {} ".format(totalFrames))
 					totalDown += 1
+					total += 1
 					to.counted = True
+					""" try:
+						r = requests.post('http://ec2-18-208-229-68.compute-1.amazonaws.com:3000/buses', data = { 'prefix':'82247','line': '7282-10',
+						'load': total,'arrival_time': datetime.now(),'py': 1,'px': 1 })
+						print(r.status_code, r.reason)
+					except Exception as a:
+						print("Exception: {}".format(a))
+						print("Deu ruim endpoint") """
+				#print("Num. Passageiros: {}".format(total))
+			
 
 		# store the trackable object in our dictionary
 		trackableObjects[objectID] = to
@@ -335,7 +355,7 @@ while True:
 	# construct a tuple of information we will be displaying on the
 	# frame
 	info = [
-		("Saída", totalUp),
+		("Saida", totalUp),
 		("Entrada", totalDown),
 		("Status", status),
 		("Frame", totalFrames),
